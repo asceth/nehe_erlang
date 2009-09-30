@@ -1,0 +1,25 @@
+This repo holds the lesson's from NeHe's OpenGL tutorials for Erlang:
+
+http://nehe.gamedev.net/
+
+
+You must have R13B and a working wx erlang library (which by default comes with R13B).
+You can type in wx:new(). to see if it is working for you in the erlang shell.
+
+
+Running the lessons:
+
+erl
+> GC = game_core:start_link().
+> game_core:load(GC, lesson01).
+
+Enjoy lesson 01...
+
+> game_core:unload(GC)  % unloads currently loaded lesson
+> game_core:load(GC, lesson02) % loads next lesson
+
+
+An interesting thing to do is try to modify a currently loaded lesson's
+source code draw method and compile it in the shell.  Initial attempts have shown
+immediate updates with no crashing which can lead up to interactive programming... :)
+
