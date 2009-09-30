@@ -1,0 +1,139 @@
+-module(lesson04).
+
+-behaviour(wx_object).
+
+-export([init/1, code_change/3, handle_info/2, handle_event/2,
+	 handle_call/3, terminate/2,
+	 start/1]).
+
+-include_lib("wx/include/wx.hrl").
+-include_lib("wx/include/gl.hrl").
+-include_lib("wx/include/glu.hrl").
+
+-record(state, {
+          parent,
+          config,
+          canvas,
+          timer,
+          time,
+          triangle_rot = 10,
+          square_rot = 10
+          }).
+
+start(Config) ->
+  wx_object:start_link(?MODULE, Config, []).
+
+init(Config) ->
+  wx:batch(fun() -> do_init(Config) end).
+
+do_init(Config) ->
+  Parent = proplists:get_value(parent, Config),
+  Size = proplists:get_value(size, Config),
+  Opts = [{size, Size}, {style, ?wxSUNKEN_BORDER}],
+  GLAttrib = [{attribList, [?WX_GL_RGBA,
+                            ?WX_GL_DOUBLEBUFFER,
+                            ?WX_GL_MIN_RED, 8,
+                            ?WX_GL_MIN_GREEN, 8,
+                            ?WX_GL_MIN_BLUE, 8,
+                            ?WX_GL_DEPTH_SIZE, 24, 0]}],
+  Canvas = wxGLCanvas:new(Parent, Opts ++ GLAttrib),
+  wxGLCanvas:connect(Canvas, size),
+  wxWindow:hide(Parent),
+  wxWindow:reparent(Canvas, Parent),
+  wxWindow:show(Parent),
+  wxGLCanvas:setCurrent(Canvas),
+  setup_gl(Canvas),
+  Timer = timer:send_interval(20, self(), update),
+
+  {Parent, #state{parent = Parent, config = Config, canvas = Canvas, timer = Timer}}.
+
+handle_event(#wx{event = #wxSize{size = {W, H}}}, State) ->
+  case W =:= 0 orelse H =:= 0 of
+    true -> skip;
+    _ ->
+      resize_gl_scene(W, H)
+  end,
+  {noreply, State}.
+
+handle_info(update, State) ->
+  NewState = wx:batch(fun() -> render(State) end),
+  {noreply, NewState};
+
+handle_info(stop, State) ->
+  timer:cancel(State#state.timer),
+  catch wxGLCanvas:destroy(State#state.canvas),
+  {stop, normal, State}.
+
+handle_call(Msg, _From, State) ->
+  io:format("Call: ~p~n", [Msg]),
+  {reply, ok, State}.
+
+code_change(_, _, State) ->
+  {stop, not_yet_implemented, State}.
+
+terminate(_Reason, State) ->
+  catch wxGLCanvas:destroy(State#state.canvas),
+  timer:cancel(State#state.timer),
+  timer:sleep(300).
+
+resize_gl_scene(Width, Height) ->
+      gl:viewport(0, 0, Width, Height),
+      gl:matrixMode(?GL_PROJECTION),
+      gl:loadIdentity(),
+      glu:perspective(45.0, Width / Height, 0.1, 100.0),
+      gl:matrixMode(?GL_MODELVIEW),
+      gl:loadIdentity().
+
+setup_gl(Win) ->
+  {W, H} = wxWindow:getClientSize(Win),
+  resize_gl_scene(W, H),
+  gl:shadeModel(?GL_SMOOTH),
+  gl:clearColor(0.0, 0.0, 0.0, 0.0),
+  gl:clearDepth(1.0),
+  gl:enable(?GL_DEPTH_TEST),
+  gl:depthFunc(?GL_LEQUAL),
+  gl:hint(?GL_PERSPECTIVE_CORRECTION_HINT, ?GL_NICEST),
+  ok.
+
+render(#state{parent = _Window, canvas = Canvas} = State) ->
+  NewState = draw(State),
+  wxGLCanvas:swapBuffers(Canvas),
+  NewState.
+
+draw(#state{triangle_rot = TriangleRot, square_rot = SquareRot} = State) ->
+  gl:clear(?GL_COLOR_BUFFER_BIT bor ?GL_DEPTH_BUFFER_BIT),
+  gl:loadIdentity(),
+  gl:translatef(-1.5, 0.0, -6.0),
+
+  gl:rotatef(TriangleRot, 0.0, 1.0, 0.0),
+  gl:'begin'(?GL_TRIANGLES),
+
+  gl:color3f(1.0, 0.0, 0.0),
+  gl:vertex3f(0.0, 1.0, 0.0),
+
+  gl:color3f(0.0, 1.0, 0.0),
+  gl:vertex3f(-1.0, -1.0, 0.0),
+
+  gl:color3f(0.0, 0.0, 1.0),
+  gl:vertex3f(1.0, -1.0, 0.0),
+
+  gl:'end'(),
+
+  gl:loadIdentity(),
+  gl:translatef(1.5, 0.0, -6.0),
+
+  gl:rotatef(SquareRot, 1.0, 0.0, 0.0),
+  gl:'begin'(?GL_QUADS),
+  gl:color3f(0.5, 0.5, 1.0),
+  gl:vertex3f(-1.0, 1.0, 0.0),
+  gl:vertex3f( 1.0, 1.0, 0.0),
+  gl:vertex3f( 1.0, -1.0, 0.0),
+  gl:vertex3f(-1.0, -1.0, 0.0),
+  gl:'end'(),
+
+  State#state{triangle_rot = TriangleRot + 0.2, square_rot = SquareRot - 0.15}.
+
+
+
+
+
